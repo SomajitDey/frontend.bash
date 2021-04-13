@@ -1,48 +1,49 @@
   #!/usr/bin/env bash
-  # A basic UI terminal
-  # Display a viewport file that is updated by other process(es)
-  # Give user an input prompt and echo everything user types there
-  # Relay user input to an inputlog file (which can be a regular file or pipe)
+  # A basic UI terminal that does the following:
+  # Display a viewport file (a regular file or sym-link) that is updated by other process(es)
+  # Give user an input prompt and echo everything the user types there
+  # Commit the user-input to an inputlog (which can be a regular file, sym-link or pipe)
   
-  # Ingredients:
-  # read -re 2>$tmpfile AND tail -F -n+1 $tmpfile (to echo user input as and when needed)
-  # fold -w $WIDTH -s $viewport or fmt for line-wrapping and reformatting the viewport
-  # tail and head or awk to print logical lines
-  # [[ $viewport nt $chkptfile ]] to know if viewport has been updated lately (requires polling every 1s)
-  # Use inotify (requires installation of inotify-tools) or use the rather resource-hungry hence stupid
-  # while sleep 1; do currhash="$(sha256sum LICENSE | cut -d ' ' -f 1)"; [[ $currhash != $oldhash ]] && date && oldhash=$currhash; done
+  # TODO: fold -w $WIDTH -s $viewport or fmt for line-wrapping and reformatting the viewport
+  # TODO: tail and head or awk to print logical lines
   
-  export viewport=/tmp/viewport
-  export tmpfile=/tmp/input
-  export pidfile=/tmp/pid
+  export viewport="/tmp/viewport.txt"
+  export inputlog="/tmp/input.log"
+  export input_buffer="/tmp/input.tmp"
+  export this_pid="$$"
 
-  prompt(){
-    ( echo $BASHPID > $pidfile
-      local chkptfile=/tmp/chkpt; touch $chkptfile
-      until [[ "$viewport" -nt "$chkptfile" ]]; do sleep 0.1; done
-      handler &
+  launch_bg(){
+    # Launch process that polls viewport for updates and repaints screen if needed
+    (
+      local chkptfile=/tmp/chkpt; touch "${chkptfile}"
+      until [[ "${viewport}" -nt "${chkptfile}" ]] || ! kill -0 "${this_pid}"; do
+        sleep 0.5 # Polling interval in seconds
+      done
+      kill -0 "${this_pid}" 2>/dev/null && repaint &
     )&
-    tail --quiet --f=name --pid=$! $tmpfile 2>/dev/null &
+    
+    # Launch process to echo user-input and the readline prompt
+    tail --quiet --f=name --pid="$!" "${input_buffer}" 2>/dev/null &
   } 2>/dev/null
 
   readline(){
-    while read -re 2>$tmpfile; do
-      [[ -n "$REPLY" ]] && echo "$REPLY" >> $viewport
+    while read -re 2> "${input_buffer}"; do
+      [[ -n "$REPLY" ]] && echo "$REPLY" >> "${inputlog}"
     done
   }
 
-  handler(){
+  repaint(){
     tput clear
-    cat $viewport
+    cat "${viewport}"
     echo -e \\n
     echo -n "Type here: " 
-    prompt
+    launch_bg
   }
   
-  rm -f $tmpfile
-  trap 'pkill -KILL --parent $(cat $pidfile); pkill -KILL --pidfile ${pidfile}; tput rmcup' exit
+  rm -f "${input_buffer}"
+  trap 'tput rmcup' exit
   tput smcup
-  handler
+  repaint
   
   readline
 
