@@ -1,0 +1,2 @@
+Bind arrow and pgup/dn keys to execute handler with arguments
+while num=$(read -re -p "type: "|& tee /dev/tty|fold -w "$(tput cols)"|wc -l); do tput cuu $num;tput ed; done

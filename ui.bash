@@ -28,7 +28,8 @@
 
   readline(){
     while read -re 2> "${input_buffer}"; do
-      [[ -n "$REPLY" ]] && echo "$REPLY" >> "${inputlog}"
+      rm -f "${input_buffer}"; touch "${viewport}" # So that there is new prompt immediately
+      [[ -n "${REPLY}" ]] && echo "${REPLY}" >> "${inputlog}"
     done
   }
 
